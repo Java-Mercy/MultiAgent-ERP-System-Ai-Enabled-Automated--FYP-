@@ -1,0 +1,45 @@
+Follow-Up Guidelines — CRM Sales Process
+==========================================
+
+CORE PRINCIPLE
+Consistent follow-up is the single biggest driver of closed deals. Most sales are made on the 5th to 8th contact. Never assume silence means disinterest.
+
+TIMING RULES BY PRIORITY
+
+High Priority Leads:
+- First follow-up: Within 24 hours of initial contact or lead creation.
+- Second follow-up: 48 hours after if no response.
+- Third follow-up: 3 days after second.
+- Escalate to sales manager if no response after 3 attempts within 1 week.
+
+Medium Priority Leads:
+- First follow-up: Within 3 business days.
+- Second follow-up: 1 week after if no response.
+- Third follow-up: 2 weeks after second.
+- Archive lead after 3 unanswered follow-ups over 30 days.
+
+Low Priority Leads:
+- First follow-up: Within 1 week.
+- Second follow-up: 2 weeks after if no response.
+- Move to nurture campaign after 2 unanswered follow-ups.
+
+PERSONALISATION REQUIREMENTS
+- Always reference the specific product, service, or problem they mentioned.
+- If a previous call or meeting happened, summarise the key takeaway from it.
+- Mention any company news or industry event relevant to their business if known.
+- Never send a generic "just checking in" email — always add value.
+
+CHANNEL SELECTION
+- Email: Default channel for all follow-ups.
+- Phone: Use for High priority leads after second unanswered email.
+- LinkedIn/Social: Acceptable for re-engagement after 2 failed email attempts, never for first contact.
+
+NOTES AND LOGGING
+- Log every follow-up attempt in the CRM immediately after sending.
+- Record the channel used, the date, and a brief note on what was sent or said.
+- Update the lead stage in Odoo after each meaningful interaction.
+- If a lead responds negatively or asks to be removed, update status to "Lost" and note the reason.
+
+HANDOFF PROTOCOL
+- If a sales rep is unavailable, another rep may follow up but must log the action under the original rep's name.
+- Any lead that goes 14 days without any contact must be flagged for review in the weekly pipeline meeting.

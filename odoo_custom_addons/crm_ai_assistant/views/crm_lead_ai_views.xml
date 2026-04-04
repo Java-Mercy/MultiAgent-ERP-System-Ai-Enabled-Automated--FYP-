@@ -1,0 +1,20 @@
+<odoo>
+    <data>
+        <record id="crm_lead_view_form_ai_assistant" model="ir.ui.view">
+            <field name="name">crm.lead.form.ai.assistant</field>
+            <field name="model">crm.lead</field>
+            <field name="inherit_id" ref="crm.crm_lead_view_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//notebook" position="inside">
+                    <page string="AI Assistant">
+                        <group>
+                            <field name="ai_summary"/>
+                            <field name="ai_priority_prediction"/>
+                            <field name="ai_email_draft"/>
+                        </group>
+                    </page>
+                </xpath>
+            </field>
+        </record>
+    </data>
+    </odoo>

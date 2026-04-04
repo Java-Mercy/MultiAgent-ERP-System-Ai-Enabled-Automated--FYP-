@@ -1,0 +1,40 @@
+Lead Scoring Policy — CRM AI System
+=====================================
+
+PURPOSE
+Leads must be scored consistently so the sales team focuses effort on the highest-value opportunities.
+
+SCORING TIERS
+
+High Priority:
+- Budget explicitly stated as greater than $5,000
+- Customer has an urgent timeline (e.g., "need this within 2 weeks", "ASAP", "before end of month")
+- Returning / repeat customer regardless of budget
+- Executive or C-level contact initiating the lead
+- Inbound lead from a paid referral or trusted partner channel
+
+Medium Priority:
+- Stated budget between $1,000 and $5,000
+- Timeline mentioned but not urgent (e.g., "sometime next quarter")
+- Previous interaction but no confirmed purchase history
+- Warm referral from an existing customer
+- Lead has asked multiple detailed questions indicating genuine interest
+
+Low Priority:
+- Budget below $1,000 or no budget mentioned
+- No clear timeline provided
+- First contact with vague or exploratory intent
+- Lead originated from a cold outreach campaign with no engagement history
+
+SPECIAL RULES
+- Always treat repeat customers as Medium or higher, regardless of current budget.
+- If a lead has both a low budget AND an urgent timeline, escalate to Medium and flag for manager review.
+- Leads with incomplete contact information default to Low until verified.
+- Re-evaluate priority after every significant interaction or new information.
+
+PRIORITY ASSIGNMENT PROCESS
+1. Read the lead notes and any attached emails.
+2. Identify budget signals, timeline indicators, and customer relationship history.
+3. Apply the tier definitions above.
+4. Record the assigned priority and the reasoning in the lead notes field.
+5. Notify the assigned sales rep of any High priority assignment immediately.

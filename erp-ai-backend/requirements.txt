@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+langchain
+langchain-groq
+langchain-core
+langchain-community
+langchain-huggingface
+langchain-pinecone
+pinecone
+python-dotenv
+sentence-transformers

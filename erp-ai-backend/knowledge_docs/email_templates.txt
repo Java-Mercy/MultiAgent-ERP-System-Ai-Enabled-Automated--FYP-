@@ -1,0 +1,63 @@
+Email Templates — CRM Communication Guide
+==========================================
+
+GENERAL PRINCIPLES
+- Every email must feel personal, not templated.
+- Reference the prospect's specific need or pain point in the opening line.
+- Keep emails under 200 words unless a detailed proposal is explicitly requested.
+- Always end with a single, clear call-to-action (CTA).
+- Use the prospect's first name throughout.
+
+---
+
+TEMPLATE TYPE 1 — FIRST CONTACT
+Use when: Initial outreach or when a new inbound lead arrives.
+
+Tone: Warm, curious, professional.
+Structure:
+  Subject: [Specific reference to their need] — [Your Company]
+  Opening: Acknowledge what brought them to you (referral, inquiry, specific product/service).
+  Body: Briefly explain how you can help. One concrete benefit, not a list of features.
+  CTA: Propose a specific short meeting (15–20 min) with two time options.
+
+Example CTA: "Would Thursday at 2 PM or Friday at 10 AM work for a quick 15-minute call?"
+
+---
+
+TEMPLATE TYPE 2 — FOLLOW-UP (after initial contact)
+Use when: No response after first email, or after a discovery call.
+
+Tone: Persistent but respectful, add-value focused.
+Structure:
+  Opening: Reference the previous conversation or email by date or topic.
+  Body: Offer something new — a case study, a relevant insight, a free resource.
+  CTA: Ask a single yes/no question to re-engage.
+
+Example CTA: "Would it help if I sent over a one-page summary of how we solved a similar challenge for [Industry] companies?"
+
+---
+
+TEMPLATE TYPE 3 — CLOSING / PROPOSAL FOLLOW-UP
+Use when: A proposal has been sent and awaits a decision.
+
+Tone: Confident, low-pressure, urgency without desperation.
+Structure:
+  Opening: Briefly recap the value discussed in the proposal.
+  Body: Address any outstanding objection if known, or reinforce the key benefit.
+  Urgency element: Mention a legitimate reason to decide soon (limited slots, pricing valid until date, etc.).
+  CTA: Request a decision or a specific next step.
+
+Example CTA: "Our current pricing is valid until [date]. Shall I reserve your slot?"
+
+---
+
+TEMPLATE TYPE 4 — RE-ENGAGEMENT (cold/dormant lead)
+Use when: Lead has been silent for 30+ days.
+
+Tone: Light, no pressure, genuinely helpful.
+Structure:
+  Opening: Acknowledge the gap without apology.
+  Body: Share something new — product update, industry news, or a quick win they could use.
+  CTA: Make it easy to respond with minimal commitment.
+
+Example CTA: "No pressure at all — just wanted to stay in touch. Is this still something on your radar?"

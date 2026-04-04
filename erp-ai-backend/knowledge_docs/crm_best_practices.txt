@@ -1,0 +1,43 @@
+CRM Best Practices — Operational Standards
+===========================================
+
+DATA HYGIENE
+- Always log every interaction immediately — not at end of day.
+- Update lead stage after each contact or meaningful event.
+- Add timestamped notes with key discussion points after every call, meeting, or email.
+- Verify and correct contact information (email, phone, company name) at first interaction.
+- Remove or merge duplicate leads within 24 hours of detection.
+
+LEAD STAGES (Odoo Pipeline)
+1. New — Lead just created, not yet contacted.
+2. Qualified — Initial contact made, need confirmed.
+3. Proposition — Proposal or demo delivered.
+4. Won — Deal closed successfully.
+5. Lost — Deal closed unsuccessfully. Always record the loss reason.
+
+STAGE PROGRESSION RULES
+- Never skip a stage without documenting why.
+- Move a lead to "Lost" instead of leaving it stagnant when there is no realistic path forward.
+- A lead should not stay in "New" for more than 48 hours after creation.
+
+COMMUNICATION STANDARDS
+- All outbound emails must be logged in the lead's chatter/notes.
+- Subject lines must be specific — never use "Following up" alone.
+- CC the assigned sales rep on all AI-generated emails before sending.
+- Never send bulk emails from a lead record — use marketing campaigns instead.
+
+PIPELINE REVIEW
+- Every sales rep reviews their pipeline weekly and updates stages.
+- Leads with expected close date in the past must be updated or moved to Lost.
+- The pipeline meeting happens every Monday at 9 AM — reps must have Odoo updated by Sunday evening.
+
+PRIVACY AND COMPLIANCE
+- Never store sensitive personal data (passport, financial details) in lead description fields.
+- Respect opt-out requests immediately — mark the contact as "Do Not Contact" in Odoo.
+- All customer data is confidential — do not share outside the sales team without manager approval.
+
+AI ASSISTANT USAGE
+- AI-generated email drafts must be reviewed by a human before sending.
+- AI priority scores are recommendations — the assigned rep has final authority.
+- Always verify AI-retrieved lead data against Odoo before acting on it.
+- Log when an AI action was taken on a lead (e.g., "AI generated email draft on [date]").
