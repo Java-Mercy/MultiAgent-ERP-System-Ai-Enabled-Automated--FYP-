@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Action to open the React app in an iframe -->
+        <record id="action_ai_chat_assistant" model="ir.actions.act_url">
+            <field name="name">AI Chat Assistant</field>
+            <field name="url">http://localhost:3000</field>
+            <field name="target">new</field>
+        </record>
+
+        <!-- Menu Item under CRM root -->
+        <menuitem id="menu_ai_chat_assistant"
+                  name="AI Chat Assistant"
+                  parent="crm.crm_menu_root"
+                  action="action_ai_chat_assistant"
+                  sequence="50" />
+    </data>
+</odoo>

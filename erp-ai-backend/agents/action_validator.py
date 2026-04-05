@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 AGENT_NAME = "ActionValidatorAgent"
 
+RBAC_DENY_MESSAGE = "You don't have permission for this action. Contact an admin."
+
 # Required fields for creating a new lead
 CREATE_REQUIRED_FIELDS = ["name"]
 
@@ -44,7 +46,25 @@ class ActionValidatorAgent:
       - Email format is valid when provided
       - Probability is within [0, 100]
       - No obviously empty / blank required fields
+      - Role-based permission for write operations (SRS 3.2.7)
     """
+
+    @staticmethod
+    def check_write_permission(role: str, operation: str) -> dict:
+        """
+        operation: 'create' | 'update' | 'delete'
+
+        Returns: {"allowed": bool, "message": str}
+        """
+        r = (role or "user").strip().lower()
+        op = (operation or "").strip().lower()
+        if r == "admin":
+            return {"allowed": True, "message": ""}
+        if r == "user":
+            logger.info(f"[{AGENT_NAME}] RBAC deny: role=user op={op}")
+            return {"allowed": False, "message": RBAC_DENY_MESSAGE}
+        logger.warning(f"[{AGENT_NAME}] RBAC unknown role={role!r} — denying write")
+        return {"allowed": False, "message": RBAC_DENY_MESSAGE}
 
     def validate_create(self, data: dict) -> dict:
         """Validate a lead creation payload."""

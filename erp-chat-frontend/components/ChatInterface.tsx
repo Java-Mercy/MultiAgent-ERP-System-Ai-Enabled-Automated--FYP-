@@ -7,8 +7,21 @@ import { Lead } from "./LeadCard";
 
 const API_BASE = "http://localhost:8000";
 const SESSION_ID = "web-user-1";
+/** Default until Odoo passes the real role (SRS 3.2.7). */
+const CHAT_ROLE = "admin";
 
-type BackendStatus = "checking" | "online" | "offline";
+type AuditEntry = {
+  id: number;
+  timestamp: string;
+  session_id: string;
+  action_type: string;
+  agent_used: string | null;
+  record_id: string | null;
+  status: string;
+  error_message: string | null;
+};
+
+type BackendStatus = "checking" | "online" | "partial" | "offline";
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -46,6 +59,9 @@ export default function ChatInterface() {
   const [input, setInput]           = useState("");
   const [loading, setLoading]       = useState(false);
   const [status, setStatus]         = useState<BackendStatus>("checking");
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   const bottomRef  = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLTextAreaElement>(null);
@@ -53,22 +69,27 @@ export default function ChatInterface() {
   /* ── Check backend health on mount ───────────────────────── */
   useEffect(() => {
     fetch(`${API_BASE}/api/status`, { signal: AbortSignal.timeout(4000) })
-      .then((r) => {
-        setStatus(r.ok ? "online" : "offline");
-        if (r.ok) {
-          setMessages([
-            {
-              id: makeId(),
-              role: "assistant",
-              content:
-                "Hello! I'm your ERP AI Assistant. I'm connected to Odoo CRM and ready to help.\n\nYou can ask me to:\n• Show or search leads\n• Create or update a lead\n• Analyze and prioritize a lead\n• Draft a professional follow-up email\n\nWhat would you like to do?",
-              agentUsed: "RouterAgent",
-              timestamp: new Date(),
-            },
-          ]);
-        } else {
+      .then(async (r) => {
+        if (!r.ok) {
+          setStatus("offline");
           setMessages([offlineMessage()]);
+          return;
         }
+        const data = await r.json();
+        if (data.status === "ok") setStatus("online");
+        else if (data.status === "partial") setStatus("partial");
+        else setStatus("offline");
+
+        setMessages([
+          {
+            id: makeId(),
+            role: "assistant",
+            content:
+              "Hello! I'm your ERP AI Assistant. I'm connected to Odoo CRM and ready to help.\n\nYou can ask me to:\n• Show or search leads\n• Create or update a lead\n• Analyze and prioritize a lead\n• Draft a professional follow-up email\n\nWhat would you like to do?",
+            agentUsed: "RouterAgent",
+            timestamp: new Date(),
+          },
+        ]);
       })
       .catch(() => {
         setStatus("offline");
@@ -76,6 +97,20 @@ export default function ChatInterface() {
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* ── Activity log sidebar ─────────────────────────────────── */
+  useEffect(() => {
+    if (!activityOpen) return;
+    setAuditLoading(true);
+    fetch(`${API_BASE}/api/audit-log?limit=10`)
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then((d: { entries?: AuditEntry[] }) => setAuditEntries(d.entries ?? []))
+      .catch(() => setAuditEntries([]))
+      .finally(() => setAuditLoading(false));
+  }, [activityOpen]);
 
   /* ── Auto-scroll ──────────────────────────────────────────── */
   useEffect(() => {
@@ -103,7 +138,11 @@ export default function ChatInterface() {
         const res = await fetch(`${API_BASE}/api/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: trimmed, session_id: SESSION_ID }),
+          body: JSON.stringify({
+            message: trimmed,
+            session_id: SESSION_ID,
+            role: CHAT_ROLE,
+          }),
           signal: AbortSignal.timeout(30000),
         });
 
@@ -152,23 +191,26 @@ export default function ChatInterface() {
   /* ── Status dot helpers ───────────────────────────────────── */
   const dotColor =
     status === "online" ? "bg-green-400 status-pulse" :
+    status === "partial" ? "bg-yellow-400" :
     status === "offline" ? "bg-red-500" :
-    "bg-yellow-400";
+    "bg-gray-400";
 
   const statusLabel =
     status === "online" ? "Online" :
+    status === "partial" ? "Partial Outage" :
     status === "offline" ? "Backend Offline" :
     "Connecting…";
 
   return (
-    <div className="flex flex-col h-full" style={{ backgroundColor: "#E0E0E0" }}>
+    <div className="flex flex-row h-full min-h-0 w-full" style={{ backgroundColor: "#E0E0E0" }}>
+    <div className="flex flex-col flex-1 min-w-0 min-h-0 h-full" style={{ backgroundColor: "#E0E0E0" }}>
 
       {/* ── Header ── */}
       <header
-        className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b"
+        className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b gap-3"
         style={{ backgroundColor: "#875A7B", borderColor: "#714B67" }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           {/* Logo mark */}
           <div
             className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm text-white"
@@ -186,10 +228,23 @@ export default function ChatInterface() {
           </div>
         </div>
 
-        {/* Status indicator */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActivityOpen((o) => !o)}
+            className="text-xs px-2.5 py-1 rounded-md border transition-colors hover:brightness-110 cursor-pointer"
+            style={{
+              backgroundColor: activityOpen ? "#F0E0EC" : "transparent",
+              borderColor: "#F0E0EC",
+              color: activityOpen ? "#714B67" : "#F0E0EC",
+            }}
+            aria-pressed={activityOpen}
+            aria-label="Toggle activity log"
+          >
+            Activity Log
+          </button>
           <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-          <span className="text-xs" style={{ color: "#F0E0EC" }}>
+          <span className="text-xs hidden sm:inline" style={{ color: "#F0E0EC" }}>
             {statusLabel}
           </span>
         </div>
@@ -274,7 +329,76 @@ export default function ChatInterface() {
         </p>
       </div>
     </div>
+
+      {/* ── Activity log sidebar ── */}
+      {activityOpen && (
+        <aside
+          className="shrink-0 w-72 max-w-[40vw] border-l flex flex-col max-h-full overflow-hidden"
+          style={{ backgroundColor: "#FFFFFF", borderColor: "#D5D5D5" }}
+        >
+          <div
+            className="px-3 py-2.5 border-b text-xs font-semibold"
+            style={{ borderColor: "#D5D5D5", color: "#714B67", backgroundColor: "#FAF8FA" }}
+          >
+            Recent activity (last 10)
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-2 text-xs">
+            {auditLoading && (
+              <p style={{ color: "#9E9E9E" }}>Loading…</p>
+            )}
+            {!auditLoading && auditEntries.length === 0 && (
+              <p style={{ color: "#9E9E9E" }}>No entries yet.</p>
+            )}
+            {!auditLoading &&
+              auditEntries.map((e) => (
+                <div
+                  key={e.id}
+                  className="rounded-lg border px-2.5 py-2"
+                  style={{
+                    borderColor: "#E8E8E8",
+                    backgroundColor: e.status === "error" ? "#FFF5F5" : "#FAFAFA",
+                  }}
+                >
+                  <div className="font-mono text-[10px] mb-1" style={{ color: "#757575" }}>
+                    {formatAuditTime(e.timestamp)}
+                  </div>
+                  <div className="font-medium leading-snug" style={{ color: "#424242" }}>
+                    {e.action_type}
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <span
+                      className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium uppercase"
+                      style={{
+                        backgroundColor: e.status === "error" ? "#FFCDD2" : "#C8E6C9",
+                        color: e.status === "error" ? "#C62828" : "#2E7D32",
+                      }}
+                    >
+                      {e.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </aside>
+      )}
+    </div>
   );
+}
+
+function formatAuditTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 /* ── helpers ── */

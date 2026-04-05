@@ -17,9 +17,15 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from config import settings
 from mcp.odoo_mcp_client import OdooMCPClient
 from rag.pinecone_store import PineconeStore
+from utils.llm_retry import invoke_groq, GroqUnavailableError
 
 logger = logging.getLogger(__name__)
 AGENT_NAME = "CommunicationAgent"
+
+RAG_FALLBACK_NOTE = (
+    "\n\n_(Note: The knowledge base was unavailable, so this reply was generated without "
+    "retrieved company policy context.)_"
+)
 
 
 class CommunicationAgent:
@@ -98,7 +104,7 @@ class CommunicationAgent:
 
         # Build RAG query from lead context
         rag_query = self._build_rag_query(message, lead, task="email")
-        policy_chunks = self._retrieve_policy_context(rag_query)
+        policy_chunks, rag_degraded = self._retrieve_policy_context(rag_query)
         context_text = self._format_policy_context(policy_chunks)
 
         lead_text = self._format_lead_for_prompt(lead) if lead else "No lead data available."
@@ -118,6 +124,8 @@ class CommunicationAgent:
         )
 
         email_draft = self._invoke_llm(system_prompt, user_prompt)
+        if rag_degraded:
+            email_draft = (email_draft or "").rstrip() + RAG_FALLBACK_NOTE
         logger.info(f"[{AGENT_NAME}] Email draft generated (RAG chunks used: {len(policy_chunks)})")
 
         # Use a short intro as the bubble text; full email goes into email_draft field
@@ -139,7 +147,7 @@ class CommunicationAgent:
         logger.info(f"[{AGENT_NAME}] Summarizing lead …")
 
         rag_query = self._build_rag_query(message, lead, task="summary")
-        policy_chunks = self._retrieve_policy_context(rag_query)
+        policy_chunks, rag_degraded = self._retrieve_policy_context(rag_query)
         context_text = self._format_policy_context(policy_chunks)
 
         lead_text = self._format_lead_for_prompt(lead) if lead else "No lead data available."
@@ -157,6 +165,8 @@ class CommunicationAgent:
         )
 
         summary = self._invoke_llm(system_prompt, user_prompt)
+        if rag_degraded:
+            summary = (summary or "").rstrip() + RAG_FALLBACK_NOTE
 
         return {
             "response": summary,
@@ -176,8 +186,9 @@ class CommunicationAgent:
         notes = (context or {}).get("notes", "")
 
         # Query Pinecone for both scoring policy and email templates
-        scoring_chunks = self._retrieve_policy_context("lead scoring priority assignment rules budget timeline")
-        email_chunks = self._retrieve_policy_context("follow-up email professional first contact template")
+        scoring_chunks, deg1 = self._retrieve_policy_context("lead scoring priority assignment rules budget timeline")
+        email_chunks, deg2 = self._retrieve_policy_context("follow-up email professional first contact template")
+        rag_degraded = deg1 or deg2
         all_chunks = scoring_chunks + email_chunks
         context_text = self._format_policy_context(all_chunks)
 
@@ -221,29 +232,36 @@ class CommunicationAgent:
             f"Priority: {priority}\n\n"
             f"{summary or 'See email draft for full details.'}"
         )
+        summary_out = summary or raw_response[:300]
+        if rag_degraded:
+            clean_response = clean_response.rstrip() + RAG_FALLBACK_NOTE
+            email_draft = (email_draft or "").rstrip() + RAG_FALLBACK_NOTE
+            summary_out = (summary_out or "").rstrip() + RAG_FALLBACK_NOTE
 
         return {
             "response": clean_response,
             "agent_used": AGENT_NAME,
             "priority": priority,
-            "summary": summary or raw_response[:300],
+            "summary": summary_out,
             "email_draft": email_draft or "",
             "rag_context_used": len(all_chunks) > 0,
         }
 
     # ── RAG ───────────────────────────────────────────────────────────────────
 
-    def _retrieve_policy_context(self, query: str) -> list[str]:
+    def _retrieve_policy_context(self, query: str) -> tuple[list[str], bool]:
         """
         Query Pinecone for relevant policy/template chunks.
-        This is MANDATORY before generating any email or analysis.
+
+        Returns (chunks, rag_degraded). rag_degraded True when Pinecone/embeddings failed
+        or are unavailable — caller should generate without RAG and may add a user note.
         """
-        if not self._pinecone.is_ready():
-            logger.warning(f"[{AGENT_NAME}] Pinecone unavailable — proceeding without RAG context.")
-            return []
-        chunks = self._pinecone.query(query, top_k=3)
-        logger.info(f"[{AGENT_NAME}] Retrieved {len(chunks)} policy chunks from Pinecone.")
-        return chunks
+        chunks, degraded = self._pinecone.query_chunks(query, top_k=3)
+        if degraded:
+            logger.warning(f"[{AGENT_NAME}] RAG degraded — proceeding without retrieved policy context.")
+        else:
+            logger.info(f"[{AGENT_NAME}] Retrieved {len(chunks)} policy chunks from Pinecone.")
+        return chunks, degraded
 
     def _build_rag_query(self, message: str, lead: Optional[dict], task: str) -> str:
         """Build a descriptive RAG query combining the task type and lead context."""
@@ -276,8 +294,11 @@ class CommunicationAgent:
     def _invoke_llm(self, system: str, user: str) -> str:
         messages = [SystemMessage(content=system), HumanMessage(content=user)]
         try:
-            response = self._llm.invoke(messages)
+            response = invoke_groq(self._llm, messages)
             return response.content
+        except GroqUnavailableError:
+            logger.error(f"[{AGENT_NAME}] Groq unavailable after retry")
+            return "AI service temporarily unavailable. Please try again in a moment."
         except Exception as e:
             logger.error(f"[{AGENT_NAME}] LLM invocation failed: {e}")
             raise

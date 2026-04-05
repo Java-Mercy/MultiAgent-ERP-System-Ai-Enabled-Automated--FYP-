@@ -19,6 +19,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from config import settings
 from mcp.odoo_mcp_client import OdooMCPClient
+from utils.llm_retry import invoke_groq, GroqUnavailableError
 
 logger = logging.getLogger(__name__)
 AGENT_NAME = "DataRetrieverAgent"
@@ -199,8 +200,14 @@ class DataRetrieverAgent:
             )),
         ]
         try:
-            response = self._llm.invoke(messages)
+            response = invoke_groq(self._llm, messages)
             return response.content
+        except GroqUnavailableError:
+            logger.error(f"[{AGENT_NAME}] Groq unavailable during summarise")
+            return (
+                "AI service temporarily unavailable. Here is the raw data:\n\n"
+                + leads_text
+            )
         except Exception as e:
             logger.error(f"[{AGENT_NAME}] LLM summarise failed: {e}")
             return f"Retrieved {len(leads)} lead(s).\n\n" + leads_text

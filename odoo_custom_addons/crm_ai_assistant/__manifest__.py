@@ -8,7 +8,8 @@
     "license": "LGPL-3",
     "depends": ["base", "crm"],
     "data": [
-        "views/crm_lead_ai_views.xml"
+        "views/crm_lead_ai_views.xml",
+        "views/ai_chat_menu.xml"
     ],
     "installable": True,
     "application": False,

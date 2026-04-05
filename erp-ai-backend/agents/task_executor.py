@@ -16,6 +16,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from config import settings
 from mcp.odoo_mcp_client import OdooMCPClient
 from agents.action_validator import ActionValidatorAgent
+from utils.llm_retry import invoke_groq, GroqUnavailableError
 
 logger = logging.getLogger(__name__)
 AGENT_NAME = "TaskExecutorAgent"
@@ -61,7 +62,7 @@ class TaskExecutorAgent:
 
     # ── Main entry point ──────────────────────────────────────────────────────
 
-    def handle(self, message: str, context: Optional[dict] = None) -> dict:
+    def handle(self, message: str, context: Optional[dict] = None, role: str = "admin") -> dict:
         """
         Parse the user's intent and execute the appropriate write operation.
 
@@ -74,11 +75,11 @@ class TaskExecutorAgent:
 
         try:
             if intent == "CREATE":
-                return self._handle_create(message, context)
+                return self._handle_create(message, context, role)
             elif intent == "UPDATE":
-                return self._handle_update(message, context)
+                return self._handle_update(message, context, role)
             elif intent == "DELETE":
-                return self._handle_delete(message, context)
+                return self._handle_delete(message, context, role)
             else:
                 return {
                     "response": "I could not determine whether you want to create, update, or delete a lead. Please be more specific.",
@@ -106,8 +107,17 @@ class TaskExecutorAgent:
 
     # ── Intent handlers ────────────────────────────────────────────────────────
 
-    def _handle_create(self, message: str, context: Optional[dict]) -> dict:
+    def _handle_create(self, message: str, context: Optional[dict], role: str = "admin") -> dict:
         logger.info(f"[{AGENT_NAME}] Executing CREATE")
+        perm = self._validator.check_write_permission(role, "create")
+        if not perm["allowed"]:
+            return {
+                "response": perm["message"],
+                "agent_used": "ActionValidatorAgent",
+                "action_taken": "unauthorized",
+                "lead_id": None,
+            }
+
         data = self._extract_create_data(message, context)
         data = self._normalize_field_names(data)
         validation = self._validator.validate_create(data)
@@ -120,7 +130,19 @@ class TaskExecutorAgent:
                 "lead_id": None,
             }
 
-        lead_id = self._odoo.create_lead(validation["validated_data"])
+        try:
+            lead_id = self._odoo.create_lead(validation["validated_data"])
+        except Exception as e:
+            logger.error(f"[{AGENT_NAME}] Odoo create_lead failed: {e}", exc_info=True)
+            return {
+                "response": (
+                    "Odoo could not create this lead. "
+                    f"Details: {str(e)}. Please verify your data and Odoo connectivity, then try again."
+                ),
+                "agent_used": AGENT_NAME,
+                "action_taken": "odoo_write_failed",
+                "lead_id": None,
+            }
         logger.info(f"[{AGENT_NAME}] Lead created: id={lead_id}")
         name = data.get("name") or data.get("partner_name", "N/A")
         return {
@@ -136,8 +158,17 @@ class TaskExecutorAgent:
             "lead_id": lead_id,
         }
 
-    def _handle_update(self, message: str, context: Optional[dict]) -> dict:
+    def _handle_update(self, message: str, context: Optional[dict], role: str = "admin") -> dict:
         logger.info(f"[{AGENT_NAME}] Executing UPDATE")
+        perm = self._validator.check_write_permission(role, "update")
+        if not perm["allowed"]:
+            return {
+                "response": perm["message"],
+                "agent_used": "ActionValidatorAgent",
+                "action_taken": "unauthorized",
+                "lead_id": None,
+            }
+
         lead_id = self._extract_lead_id(message, context)
         if not lead_id:
             return {
@@ -167,7 +198,19 @@ class TaskExecutorAgent:
                 "lead_id": lead_id,
             }
 
-        self._odoo.update_lead(lead_id, validation["validated_data"])
+        try:
+            self._odoo.update_lead(lead_id, validation["validated_data"])
+        except Exception as e:
+            logger.error(f"[{AGENT_NAME}] Odoo update_lead failed: {e}", exc_info=True)
+            return {
+                "response": (
+                    f"Odoo could not update lead #{lead_id}. "
+                    f"Details: {str(e)}. Check the lead ID and your permissions."
+                ),
+                "agent_used": AGENT_NAME,
+                "action_taken": "odoo_write_failed",
+                "lead_id": lead_id,
+            }
         fields_updated = ", ".join(data.keys())
         logger.info(f"[{AGENT_NAME}] Lead #{lead_id} updated: {fields_updated}")
         return {
@@ -177,8 +220,17 @@ class TaskExecutorAgent:
             "lead_id": lead_id,
         }
 
-    def _handle_delete(self, message: str, context: Optional[dict]) -> dict:
+    def _handle_delete(self, message: str, context: Optional[dict], role: str = "admin") -> dict:
         logger.info(f"[{AGENT_NAME}] Executing DELETE")
+        perm = self._validator.check_write_permission(role, "delete")
+        if not perm["allowed"]:
+            return {
+                "response": perm["message"],
+                "agent_used": "ActionValidatorAgent",
+                "action_taken": "unauthorized",
+                "lead_id": None,
+            }
+
         lead_id = self._extract_lead_id(message, context)
         if not lead_id:
             return {
@@ -212,7 +264,19 @@ class TaskExecutorAgent:
                 "lead_id": lead_id,
             }
 
-        self._odoo.delete_lead(lead_id)
+        try:
+            self._odoo.delete_lead(lead_id)
+        except Exception as e:
+            logger.error(f"[{AGENT_NAME}] Odoo delete_lead failed: {e}", exc_info=True)
+            return {
+                "response": (
+                    f"Odoo could not delete lead #{lead_id}. "
+                    f"Details: {str(e)}. The record may be protected or already removed."
+                ),
+                "agent_used": AGENT_NAME,
+                "action_taken": "odoo_write_failed",
+                "lead_id": lead_id,
+            }
         logger.info(f"[{AGENT_NAME}] Lead #{lead_id} deleted")
         return {
             "response": f"Lead #{lead_id} has been permanently deleted from Odoo.",
@@ -280,12 +344,14 @@ Example: {{"name": "Tech Solutions Opportunity", "partner_name": "Ahmed Khan", "
 Output only the dict, no explanation:"""
 
         try:
-            response = self._llm.invoke([HumanMessage(content=prompt)])
+            response = invoke_groq(self._llm, [HumanMessage(content=prompt)])
             text = response.content.strip()
             match = re.search(r"\{.*\}", text, re.DOTALL)
             if match:
                 import ast
                 return ast.literal_eval(match.group())
+        except GroqUnavailableError:
+            logger.error(f"[{AGENT_NAME}] Groq unavailable during create extraction")
         except Exception as e:
             logger.error(f"[{AGENT_NAME}] LLM extraction failed: {e}")
 
@@ -314,12 +380,14 @@ Example: {{"priority": "2", "description": "Updated notes"}}
 Output only the dict, no explanation:"""
 
         try:
-            response = self._llm.invoke([HumanMessage(content=prompt)])
+            response = invoke_groq(self._llm, [HumanMessage(content=prompt)])
             text = response.content.strip()
             match = re.search(r"\{.*\}", text, re.DOTALL)
             if match:
                 import ast
                 return ast.literal_eval(match.group())
+        except GroqUnavailableError:
+            logger.error(f"[{AGENT_NAME}] Groq unavailable during update extraction")
         except Exception as e:
             logger.error(f"[{AGENT_NAME}] LLM update extraction failed: {e}")
 

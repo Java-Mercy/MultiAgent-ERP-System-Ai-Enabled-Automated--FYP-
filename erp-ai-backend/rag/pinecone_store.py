@@ -119,6 +119,26 @@ class PineconeStore:
             logger.error(f"[PineconeStore] query() failed: {e}", exc_info=True)
             return []
 
+    def query_chunks(self, query_text: str, top_k: int = 3) -> tuple[list[str], bool]:
+        """
+        Returns (chunks, rag_degraded).
+
+        rag_degraded is True when Pinecone/embeddings are unavailable or the query failed,
+        so the caller can fall back without RAG and optionally inform the user.
+        """
+        if not settings.PINECONE_API_KEY or self.index is None:
+            logger.warning("[PineconeStore] query_chunks: index unavailable — RAG degraded.")
+            return [], True
+        vs = self._get_vector_store()
+        if vs is None:
+            return [], True
+        try:
+            docs = vs.similarity_search(query_text, k=top_k)
+            return [doc.page_content for doc in docs], False
+        except Exception as e:
+            logger.error(f"[PineconeStore] query_chunks() failed: {e}", exc_info=True)
+            return [], True
+
     def query_with_scores(self, query_text: str, top_k: int = 3) -> list[tuple[str, float]]:
         """Returns (text, score) tuples for relevance debugging."""
         vs = self._get_vector_store()
