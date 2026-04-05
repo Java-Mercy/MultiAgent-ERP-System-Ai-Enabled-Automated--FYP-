@@ -12,6 +12,7 @@ Intent classes:
 """
 
 import logging
+import re
 from typing import Optional
 
 from langchain_groq import ChatGroq
@@ -41,9 +42,14 @@ class RouterAgent:
 
     Responsibilities:
       1. Classify the user's intent via LLM.
-      2. Instantiate and call the appropriate specialist agent.
-      3. Return the combined response to the caller.
+      2. Resolve ambiguous references using session history (e.g. "the first one").
+      3. Instantiate and call the appropriate specialist agent.
+      4. Return the combined response to the caller.
     """
+
+    # In-memory session store: session_id → list of {role, content, data}
+    # Keeps last 20 entries (10 exchanges) per session.
+    _session_store: dict = {}
 
     def __init__(self):
         self._llm = ChatGroq(
@@ -81,18 +87,25 @@ class RouterAgent:
         """
         logger.info(f"[{AGENT_NAME}] session={session_id} | message={message[:80]}")
 
+        # Load conversation history for this session
+        history = RouterAgent._session_store.get(session_id, [])
+
+        # Resolve ambiguous references (e.g. "the first one", "tell me more about it")
+        # Only use if caller didn't provide explicit context
+        resolved_context = context if context else self._resolve_references(message, history)
+
         intent = self._classify_intent(message)
         logger.info(f"[{AGENT_NAME}] Classified intent: {intent} → {INTENT_AGENT_MAP.get(intent, 'Unknown')}")
 
         try:
             if intent == "QUERY":
-                result = self._get_data_retriever().handle(message, context)
+                result = self._get_data_retriever().handle(message, resolved_context)
 
             elif intent == "ACTION":
-                result = self._get_task_executor().handle(message, context)
+                result = self._get_task_executor().handle(message, resolved_context)
 
             elif intent in ("ANALYSIS", "COMMUNICATION"):
-                result = self._get_communication_agent().handle(message, context)
+                result = self._get_communication_agent().handle(message, resolved_context)
 
             else:
                 result = self._handle_unknown(message)
@@ -100,6 +113,17 @@ class RouterAgent:
             # Ensure intent is always included in the response
             result["intent"] = intent
             result.setdefault("action_taken", None)
+
+            # Persist exchange to session history
+            new_history = list(history)
+            new_history.append({"role": "user", "content": message})
+            new_history.append({
+                "role": "assistant",
+                "content": result.get("response", ""),
+                "data": result.get("data"),          # lead list/dict for reference resolution
+            })
+            RouterAgent._session_store[session_id] = new_history[-20:]  # cap at 10 exchanges
+
             return result
 
         except Exception as e:
@@ -146,7 +170,7 @@ class RouterAgent:
         """Fallback keyword-based intent classification."""
         msg = message.lower()
 
-        query_kw = ["show", "list", "get", "search", "find", "display", "view", "filter", "fetch", "all leads"]
+        query_kw = ["show", "list", "get", "search", "find", "display", "view", "filter", "fetch", "all leads", "tell me more", "more about", "more details"]
         action_kw = ["create", "add", "new lead", "update", "edit", "change", "delete", "remove"]
         analysis_kw = ["analyze", "analyse", "priority", "assess", "evaluate", "score", "rank"]
         comm_kw = ["email", "draft", "write", "summary", "summarize", "follow-up", "generate", "compose"]
@@ -161,6 +185,71 @@ class RouterAgent:
             return "QUERY"
 
         return "QUERY"  # Safe default
+
+    # ── Session reference resolution ──────────────────────────────────────────
+
+    def _resolve_references(self, message: str, history: list) -> Optional[dict]:
+        """
+        Detect references to previously retrieved leads and resolve them to a
+        concrete lead_id using session history.
+
+        Examples handled:
+          "Tell me more about the first one"  → {"lead_id": <first lead's id>}
+          "More details on the second lead"   → {"lead_id": <second lead's id>}
+          "What about the last one?"          → {"lead_id": <last lead's id>}
+        """
+        if not history:
+            return None
+
+        msg = message.lower()
+
+        # Don't interfere if the message already contains an explicit lead ID
+        has_explicit_id = bool(re.search(r"lead\s*#\s*\d+|#\d+|\bid\s*\d+|\blead\s+\d+", msg))
+        if has_explicit_id:
+            return None
+
+        # Patterns that suggest a reference to a previously shown lead
+        reference_triggers = [
+            "first one", "first lead", "the first",
+            "second one", "second lead", "the second",
+            "third one", "third lead", "the third",
+            "last one", "last lead", "the last",
+            "tell me more", "more about",
+            "more details", "more info",
+            "that lead", "this lead",
+        ]
+
+        if not any(pat in msg for pat in reference_triggers):
+            return None
+
+        # Walk backward through history to find the last response containing lead data
+        for entry in reversed(history):
+            if entry.get("role") != "assistant":
+                continue
+            data = entry.get("data")
+            if not data:
+                continue
+
+            leads = data if isinstance(data, list) else ([data] if isinstance(data, dict) and data.get("id") else [])
+            if not leads:
+                continue
+
+            # Determine which lead to reference based on ordinal keywords
+            if "second" in msg and len(leads) > 1:
+                target = leads[1]
+            elif "third" in msg and len(leads) > 2:
+                target = leads[2]
+            elif "last" in msg:
+                target = leads[-1]
+            else:
+                target = leads[0]  # Default: first
+
+            lead_id = target.get("id") if isinstance(target, dict) else None
+            if lead_id:
+                logger.info(f"[{AGENT_NAME}] Session reference resolved to lead #{lead_id} from history")
+                return {"lead_id": lead_id}
+
+        return None
 
     # ── Unknown intent ────────────────────────────────────────────────────────
 

@@ -120,8 +120,13 @@ class CommunicationAgent:
         email_draft = self._invoke_llm(system_prompt, user_prompt)
         logger.info(f"[{AGENT_NAME}] Email draft generated (RAG chunks used: {len(policy_chunks)})")
 
+        # Use a short intro as the bubble text; full email goes into email_draft field
+        # (prevents duplicate rendering in the frontend)
+        lead_name = lead.get("name", "the lead") if lead else "the lead"
+        intro = f"Here's a professional follow-up email for {lead_name}, based on company email policy:"
+
         return {
-            "response": email_draft,
+            "response": intro,
             "agent_used": AGENT_NAME,
             "priority": None,
             "summary": None,
@@ -210,8 +215,15 @@ class CommunicationAgent:
 
         logger.info(f"[{AGENT_NAME}] Analysis complete — priority={priority}, rag_chunks={len(all_chunks)}")
 
+        # Build a clean response for the chat bubble (not the raw LLM output)
+        clean_response = (
+            f"Lead analysis complete.\n\n"
+            f"Priority: {priority}\n\n"
+            f"{summary or 'See email draft for full details.'}"
+        )
+
         return {
-            "response": raw_response,
+            "response": clean_response,
             "agent_used": AGENT_NAME,
             "priority": priority,
             "summary": summary or raw_response[:300],
